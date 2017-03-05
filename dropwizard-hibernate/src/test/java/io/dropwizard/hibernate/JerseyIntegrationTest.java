@@ -7,6 +7,7 @@ import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.DropwizardResourceConfig;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import io.dropwizard.jersey.jackson.JacksonMessageBodyProvider;
+import io.dropwizard.jersey.optional.EmptyOptionalExceptionMapper;
 import io.dropwizard.lifecycle.setup.LifecycleEnvironment;
 import io.dropwizard.logging.BootstrapLogging;
 import io.dropwizard.setup.Environment;
@@ -15,6 +16,7 @@ import org.glassfish.jersey.test.JerseyTest;
 import org.glassfish.jersey.test.TestProperties;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
+import org.hibernate.Transaction;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 import org.junit.After;
@@ -116,20 +118,24 @@ public class JerseyIntegrationTest extends JerseyTest {
                                             ImmutableList.of(Person.class));
 
         try (Session session = sessionFactory.openSession()) {
-            session.createSQLQuery("DROP TABLE people IF EXISTS").executeUpdate();
-            session.createSQLQuery(
+            Transaction transaction = session.beginTransaction();
+            session.createNativeQuery("DROP TABLE people IF EXISTS").executeUpdate();
+            session.createNativeQuery(
                 "CREATE TABLE people (name varchar(100) primary key, email varchar(16), birthday timestamp with time zone)")
                 .executeUpdate();
-            session.createSQLQuery(
+            session.createNativeQuery(
                 "INSERT INTO people VALUES ('Coda', 'coda@example.com', '1979-01-02 00:22:00+0:00')")
                 .executeUpdate();
+            transaction.commit();
         }
 
         final DropwizardResourceConfig config = DropwizardResourceConfig.forTesting(new MetricRegistry());
         config.register(new UnitOfWorkApplicationListener("hr-db", sessionFactory));
         config.register(new PersonResource(new PersonDAO(sessionFactory)));
         config.register(new JacksonMessageBodyProvider(Jackson.newObjectMapper()));
+        config.register(new PersistenceExceptionMapper());
         config.register(new DataExceptionMapper());
+        config.register(new EmptyOptionalExceptionMapper());
 
         return config;
     }

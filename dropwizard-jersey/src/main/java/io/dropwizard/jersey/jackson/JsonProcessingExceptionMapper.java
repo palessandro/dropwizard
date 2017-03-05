@@ -7,16 +7,22 @@ import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.fasterxml.jackson.databind.exc.PropertyBindingException;
 import com.google.common.base.Throwables;
 import io.dropwizard.jersey.errors.ErrorMessage;
+import io.dropwizard.jersey.errors.LoggingExceptionMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
-import javax.ws.rs.ext.ExceptionMapper;
 import javax.ws.rs.ext.Provider;
+import java.util.regex.Pattern;
 
 @Provider
-public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProcessingException> {
+public class JsonProcessingExceptionMapper extends LoggingExceptionMapper<JsonProcessingException> {
+    // Pattern to match jackson error messages where a class lacks a single argument constructor
+    // or factory to handle a given type. For example:
+    // "no boolean/Boolean-argument constructor/factory method to deserialize from boolean value"
+    private static final Pattern WRONG_TYPE_REGEX = Pattern.compile("factory method to deserialize from \\w+ value");
+
     private static final Logger LOGGER = LoggerFactory.getLogger(JsonProcessingExceptionMapper.class);
     private final boolean showDetails;
 
@@ -38,8 +44,7 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
          * If the error is in the JSON generation, it's a server error.
          */
         if (exception instanceof JsonGenerationException) {
-            LOGGER.warn("Error generating JSON", exception);
-            return Response.serverError().build();
+            return super.toResponse(exception); // LoggingExceptionMapper will log exception
         }
 
         final String message = exception.getOriginalMessage();
@@ -60,13 +65,14 @@ public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProces
             // Until completely foolproof mechanism can be worked out in coordination
             // with Jackson on how to communicate client vs server fault, compare
             // start of message with known server faults.
-            final boolean beanError = cause.getMessage().startsWith("No suitable constructor found") ||
-                cause.getMessage().startsWith("Can not construct instance") ||
-                cause.getMessage().startsWith("No serializer found for class");
+            final boolean beanError = cause.getMessage() == null ||
+                (cause.getMessage().startsWith("No suitable constructor found") ||
+                cause.getMessage().startsWith("No serializer found for class") ||
+                (cause.getMessage().startsWith("Can not construct instance") &&
+                    !WRONG_TYPE_REGEX.matcher(cause.getMessage()).find()));
 
             if (beanError && !clientCause) {
-                LOGGER.error("Unable to serialize or deserialize the specific type", exception);
-                return Response.serverError().build();
+                return super.toResponse(exception); // LoggingExceptionMapper will log exception
             }
         }
 

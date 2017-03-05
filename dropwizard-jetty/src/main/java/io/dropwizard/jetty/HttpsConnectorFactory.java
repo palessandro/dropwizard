@@ -152,20 +152,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *     </tr>
  *     <tr>
  *         <td>{@code validateCerts}</td>
- *         <td>true</td>
+ *         <td>false</td>
  *         <td>
  *             Whether or not to validate TLS certificates before starting. If enabled, Dropwizard
- *             will refuse to start with expired or otherwise invalid certificates.
+ *             will refuse to start with expired or otherwise invalid certificates. This option will
+ *             cause unconditional failure in Dropwizard 1.x until a new validation mechanism can be
+ *             implemented.
  *         </td>
  *     </tr>
  *     <tr>
  *         <td>{@code validatePeers}</td>
- *         <td>true</td>
- *         <td>Whether or not to validate TLS peer certificates.</td>
+ *         <td>false</td>
+ *         <td>
+ *             Whether or not to validate TLS peer certificates. This option will
+ *             cause unconditional failure in Dropwizard 1.x until a new validation mechanism can be
+ *             implemented.
+ *         </td>
  *     </tr>
  *     <tr>
  *         <td>{@code supportedProtocols}</td>
- *         <td>(none)</td>
+ *         <td>JVM default</td>
  *         <td>
  *             A list of protocols (e.g., {@code SSLv3}, {@code TLSv1}) which are supported. All
  *             other protocols will be refused.
@@ -173,7 +179,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *     </tr>
  *     <tr>
  *         <td>{@code excludedProtocols}</td>
- *         <td>(none)</td>
+ *         <td>Jetty's default</td>
  *         <td>
  *             A list of protocols (e.g., {@code SSLv3}, {@code TLSv1}) which are excluded. These
  *             protocols will be refused.
@@ -181,15 +187,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *     </tr>
  *     <tr>
  *         <td>{@code supportedCipherSuites}</td>
- *         <td>(none)</td>
+ *         <td>JVM default</td>
  *         <td>
  *             A list of cipher suites (e.g., {@code TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256}) which
  *             are supported. All other cipher suites will be refused
  *         </td>
- *     </tr>
+ *    </tr>
  *    <tr>
  *         <td>{@code excludedCipherSuites}</td>
- *         <td>(none)</td>
+ *         <td>Jetty's default</td>
  *         <td>
  *             A list of cipher suites (e.g., {@code TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256}) which
  *             are excluded. These cipher suites will be refused.
@@ -247,8 +253,8 @@ public class HttpsConnectorFactory extends HttpConnectorFactory {
     private Integer maxCertPathLength;
     private URI ocspResponderUrl;
     private String jceProvider;
-    private boolean validateCerts = true;
-    private boolean validatePeers = true;
+    private boolean validateCerts = false;
+    private boolean validatePeers = false;
     private List<String> supportedProtocols;
     private List<String> excludedProtocols;
     private List<String> supportedCipherSuites;
@@ -533,10 +539,11 @@ public class HttpsConnectorFactory extends HttpConnectorFactory {
 
         final HttpConnectionFactory httpConnectionFactory = buildHttpConnectionFactory(httpConfig);
 
-        final SslContextFactory sslContextFactory = buildSslContextFactory();
+        final SslContextFactory sslContextFactory = configureSslContextFactory(new SslContextFactory());
         sslContextFactory.addLifeCycleListener(logSslInfoOnStart(sslContextFactory));
 
         server.addBean(sslContextFactory);
+        server.addBean(new SslReload(sslContextFactory, this::configureSslContextFactory));
 
         final SslConnectionFactory sslConnectionFactory =
                 new SslConnectionFactory(sslContextFactory, HttpVersion.HTTP_1_1.toString());
@@ -599,8 +606,7 @@ public class HttpsConnectorFactory extends HttpConnectorFactory {
         }
     }
 
-    protected SslContextFactory buildSslContextFactory() {
-        final SslContextFactory factory = new SslContextFactory();
+    protected SslContextFactory configureSslContextFactory(SslContextFactory factory) {
         if (keyStorePath != null) {
             factory.setKeyStorePath(keyStorePath);
         }

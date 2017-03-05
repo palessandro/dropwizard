@@ -104,21 +104,52 @@ GZip
 Request Log
 ...........
 
+The new request log uses the `logback-access`_ library for processing request logs, which allow to use an extended set
+of logging patterns. See the `logback-access-pattern`_ docs for the reference.
+
 .. code-block:: yaml
 
     server:
       requestLog:
         appenders:
           - type: console
-            timeZone: UTC
 
+.. _logback-access: http://logback.qos.ch/access.html
+.. _logback-access-pattern: http://logback.qos.ch/manual/layouts.html#AccessPatternLayout
 
-====================== ================ ===========
+====================== ================ ======================================================================
 Name                   Default          Description
-====================== ================ ===========
+====================== ================ ======================================================================
 appenders              console appender The set of AppenderFactory appenders to which requests will be logged.
                                         See :ref:`logging <man-configuration-logging>` for more info.
-====================== ================ ===========
+====================== ================ ======================================================================
+
+
+Classic Request Log
+...................
+
+The classic request log uses the `logback-classic`_ library for processing request logs. It produces logs only in the
+standard `NCSA common log format`_, but allows to use an extended set of appenders.
+
+.. code-block:: yaml
+
+    server:
+      requestLog:
+        type: classic
+        timeZone: UTC
+        appenders:
+          - type: console
+
+.. _logback-classic: http://logback.qos.ch/
+.. _NCSA common log format: https://en.wikipedia.org/wiki/Common_Log_Format
+
+====================== ================ ======================================================================
+Name                   Default          Description
+====================== ================ ======================================================================
+timeZone               UTC              The time zone to which request timestamps will be converted.
+appenders              console appender The set of AppenderFactory appenders to which requests will be logged.
+                                        See :ref:`logging <man-configuration-logging>` for more info.
+====================== ================ ======================================================================
 
 .. _man-configuration-server-push:
 
@@ -274,6 +305,7 @@ HTTP
           useServerHeader: false
           useDateHeader: true
           useForwardedHeaders: true
+          httpCompliance: RFC7230
 
 
 ======================== ==================  ======================================================================================
@@ -303,11 +335,16 @@ idleTimeout              30 seconds          The maximum idle time for a connect
                                              or when waiting for a new message to be sent on a connection.
                                              This value is interpreted as the maximum time between some progress being made on the
                                              connection. So if a single byte is read or written, then the timeout is reset.
+blockingTimeout          (none)              The timeout applied to blocking operations. This timeout is in addition to
+                                             the `idleTimeout`, and applies to the total operation (as opposed to the
+                                             idle timeout that applies to the time no data is being sent).
 minBufferPoolSize        64 bytes            The minimum size of the buffer pool.
 bufferPoolIncrement      1KiB                The increment by which the buffer pool should be increased.
 maxBufferPoolSize        64KiB               The maximum size of the buffer pool.
-acceptorThreads          # of CPUs/2         The number of worker threads dedicated to accepting connections.
-selectorThreads          # of CPUs           The number of worker threads dedicated to sending and receiving data.
+acceptorThreads          (Jetty's default)   The number of worker threads dedicated to accepting connections.
+                                             By default is *max(1, min(4, #CPUs/8))*.
+selectorThreads          (Jetty's default)   The number of worker threads dedicated to sending and receiving data.
+                                             By default is *max(1, min(4, #CPUs/2))*.
 acceptQueueSize          (OS default)        The size of the TCP/IP accept queue for the listening socket.
 reuseAddress             true                Whether or not ``SO_REUSEADDR`` is enabled on the listening socket.
 soLingerTime             (disabled)          Enable/disable ``SO_LINGER`` with the specified linger time.
@@ -315,6 +352,15 @@ useServerHeader          false               Whether or not to add the ``Server`
 useDateHeader            true                Whether or not to add the ``Date`` header to each response.
 useForwardedHeaders      true                Whether or not to look at ``X-Forwarded-*`` headers added by proxies. See
                                              `ForwardedRequestCustomizer`_ for details.
+httpCompliance           RFC7230             This sets the http compliance level used by Jetty when parsing http, this
+                                             can be useful when using a non-RFC7230 compliant front end, such as nginx,
+                                             which can produce multi-line headers when forwarding client certificates
+                                             using ``proxy_set_header X-SSL-CERT $ssl_client_cert;``
+                                             Possible values are set forth in the ``org.eclipse.jetty.http.HttpCompliance``
+                                             enum:
+
+                                             * RFC7230: Disallow header folding.
+                                             * RFC2616: Allow header folding.
 ======================== ==================  ======================================================================================
 
 .. _`java.net.Socket#setSoTimeout(int)`: http://docs.oracle.com/javase/7/docs/api/java/net/Socket.html#setSoTimeout(int)
@@ -355,12 +401,12 @@ Extends the attributes that are available to the :ref:`HTTP connector <man-confi
           maxCertPathLength: (unlimited)
           ocspResponderUrl: (none)
           jceProvider: (none)
-          validateCerts: true
-          validatePeers: true
-          supportedProtocols: [SSLv3]
-          excludedProtocols: (none)
-          supportedCipherSuites: [TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256]
-          excludedCipherSuites: (none)
+          validateCerts: false
+          validatePeers: false
+          supportedProtocols: (JVM default)
+          excludedProtocols: [SSL, SSLv2, SSLv2Hello, SSLv3] # (Jetty's default)
+          supportedCipherSuites: (JVM default)
+          excludedCipherSuites: [.*_(MD5|SHA|SHA1)$] # (Jetty's default)
           allowRenegotiation: true
           endpointIdentificationAlgorithm: (none)
 
@@ -388,9 +434,13 @@ enableOCSP                       false               Whether or not On-Line Cert
 maxCertPathLength                (unlimited)         The maximum certification path length.
 ocspResponderUrl                 (none)              The location of the OCSP responder.
 jceProvider                      (none)              The name of the JCE provider to use for cryptographic support.
-validateCerts                    true                Whether or not to validate TLS certificates before starting. If enabled, Dropwizard
-                                                     will refuse to start with expired or otherwise invalid certificates.
-validatePeers                    true                Whether or not to validate TLS peer certificates.
+validateCerts                    false               Whether or not to validate TLS certificates before starting. If enabled, Dropwizard
+                                                     will refuse to start with expired or otherwise invalid certificates. This option will
+                                                     cause unconditional failure in Dropwizard 1.x until a new validation mechanism can be
+                                                     implemented.
+validatePeers                    false               Whether or not to validate TLS peer certificates. This option will
+                                                     cause unconditional failure in Dropwizard 1.x until a new validation mechanism can be
+                                                     implemented.
 supportedProtocols               (none)              A list of protocols (e.g., ``SSLv3``, ``TLSv1``) which are supported. All
                                                      other protocols will be refused.
 excludedProtocols                (none)              A list of protocols (e.g., ``SSLv3``, ``TLSv1``) which are excluded. These
@@ -450,6 +500,7 @@ This connector extends the attributes that are available to the :ref:`HTTPS conn
           keyStorePassword: changeit
           trustStorePath: /path/to/file # required
           trustStorePassword: changeit
+          supportedCipherSuites: TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256
 
 
 ========================  ========  ===================================================================================
@@ -520,14 +571,14 @@ Logging
         - type: console
 
 
-====================== ===========  ===========
+====================== ===========  ============================================================
 Name                   Default      Description
-====================== ===========  ===========
+====================== ===========  ============================================================
 level                  Level.INFO   Logback logging level.
 additive               true         Logback additive setting.
 loggers                (none)       Individual logger configuration (both forms are acceptable).
 appenders              (none)       One of console, file or syslog.
-====================== ===========  ===========
+====================== ===========  ============================================================
 
 
 .. _man-configuration-logging-console:
@@ -542,6 +593,8 @@ Console
       appenders:
         - type: console
           threshold: ALL
+          queueSize: 512
+          discardingThreshold: 0
           timeZone: UTC
           target: stdout
           logFormat: # TODO
@@ -554,6 +607,12 @@ Name                   Default      Description
 ====================== ===========  ===========
 type                   REQUIRED     The appender type. Must be ``console``.
 threshold              ALL          The lowest level of events to print to the console.
+queueSize              256          The maximum capacity of the blocking queue.
+discardingThreshold    51           When the blocking queue has only the capacity mentioned in
+                                    discardingThreshold remaining, it will drop events of level TRACE,
+                                    DEBUG and INFO, keeping only events of level WARN and ERROR.
+                                    If no discarding threshold is specified, then a default of queueSize / 5 is used.
+                                    To keep all events, set discardingThreshold to 0.
 timeZone               UTC          The time zone to which event timestamps will be converted.
 target                 stdout       The name of the standard stream to which events will be written.
                                     Can be ``stdout`` or ``stderr``.
@@ -561,6 +620,8 @@ logFormat              default      The Logback pattern with which events will b
                                     the Logback_ documentation for details.
 filterFactories        (none)       The list of filters to apply to the appender, in order, after
                                     the thresold.
+neverBlock             false        Prevent the wrapping asynchronous appender from blocking when its underlying queue is full.
+                                    Set to true to disable blocking.
 ====================== ===========  ===========
 
 .. _Logback: http://logback.qos.ch/manual/layouts.html#conversionWord
@@ -579,6 +640,8 @@ File
         - type: file
           currentLogFilename: /var/log/myapplication.log
           threshold: ALL
+          queueSize: 512
+          discardingThreshold: 0
           archive: true
           archivedLogFilenamePattern: /var/log/myapplication-%d.log
           archivedFileCount: 5
@@ -594,6 +657,11 @@ Name                         Default      Description
 type                         REQUIRED     The appender type. Must be ``file``.
 currentLogFilename           REQUIRED     The filename where current events are logged.
 threshold                    ALL          The lowest level of events to write to the file.
+queueSize                    256          The maximum capacity of the blocking queue.
+discardingThreshold          51           When the blocking queue has only the capacity mentioned in discardingThreshold
+                                          remaining, it will drop events of level TRACE, DEBUG and INFO, keeping only events
+                                          of level WARN and ERROR. If no discarding threshold is specified, then a default
+                                          of queueSize / 5 is used. To keep all events, set discardingThreshold to 0.
 archive                      true         Whether or not to archive old events in separate files.
 archivedLogFilenamePattern   (none)       Required if ``archive`` is ``true``.
                                           The filename pattern for archived files.
@@ -613,6 +681,8 @@ logFormat                    default      The Logback pattern with which events 
                                           the Logback_ documentation for details.
 filterFactories              (none)       The list of filters to apply to the appender, in order, after
                                           the thresold.
+neverBlock                   false        Prevent the wrapping asynchronous appender from blocking when its underlying queue is full.
+                                          Set to true to disable blocking.
 ============================ ===========  ==================================================================================================
 
 
@@ -654,6 +724,8 @@ stackTracePrefix             \t           The prefix to use when writing stack t
                                           to the syslog server separately from the main message)
 filterFactories              (none)       The list of filters to apply to the appender, in order, after
                                           the thresold.
+neverBlock                   false        Prevent the wrapping asynchronous appender from blocking when its underlying queue is full.
+                                          Set to true to disable blocking.
 ============================ ===========  ==================================================================================================
 
 
@@ -1046,7 +1118,8 @@ keyStoreType                 JKS                The type of key store (usually `
 trustStorePath               (none)             The path to the Java key store which contains the CA certificates used to establish trust.
 trustStorePassword           (none)             The password used to access the trust store.
 trustStoreType               JKS                The type of trust store (usually ``JKS``, ``PKCS12``, ``JCEKS``, ``Windows-MY``, or ``Windows-ROOT``).
-trustSelfSignedCertificates  false              Whether the client will trust certificates of servers that are self-signed.
+trustSelfSignedCertificates  false              If true, will trust all self-signed certificates regardless of trustStore settings.
+                                                If false, trust decisions will be handled by the supplied trustStore.
 supportedProtocols           (none)             A list of protocols (e.g., ``SSLv3``, ``TLSv1``) which are supported. All
                                                 other protocols will be refused.
 supportedCipherSuites        (none)             A list of cipher suites (e.g., ``TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256``) which
@@ -1278,3 +1351,6 @@ Now you can use ``WidgetFactory`` objects in your application's configuration.
         weight: 20
       - type: chisel
         radius: 0.4
+
+See :ref:`testing configurations <man-testing-configurations>` for details on ensuring the
+configuration will be deserialized correctly.

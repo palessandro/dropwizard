@@ -7,6 +7,7 @@ import com.codahale.metrics.annotation.ExceptionMetered;
 import com.codahale.metrics.annotation.Metered;
 import com.codahale.metrics.annotation.Timed;
 import com.google.common.base.Charsets;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.io.CharStreams;
 import com.google.common.net.MediaType;
@@ -91,6 +92,24 @@ public class TaskServlet extends HttpServlet {
     }
 
     @Override
+    protected void doGet(HttpServletRequest req,
+                         HttpServletResponse resp) throws ServletException, IOException {
+        if (Strings.isNullOrEmpty(req.getPathInfo())) {
+            try (final PrintWriter output = resp.getWriter()) {
+                resp.setContentType(MediaType.PLAIN_TEXT_UTF_8.toString());
+                getTasks().stream()
+                    .map(Task::getName)
+                    .sorted()
+                    .forEach(output::println);
+            }
+        } else if (tasks.containsKey(req.getPathInfo())) {
+            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+        } else {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND);
+        }
+    }
+
+    @Override
     protected void doPost(HttpServletRequest req,
                           HttpServletResponse resp) throws ServletException, IOException {
         final Task task = tasks.get(req.getPathInfo());
@@ -152,15 +171,11 @@ public class TaskServlet extends HttpServlet {
         }
 
         public void executeTask(ImmutableMultimap<String, String> params, String body, PrintWriter output) throws Exception {
-            try {
-                if (task instanceof PostBodyTask) {
-                    PostBodyTask postBodyTask = (PostBodyTask) task;
-                    postBodyTask.execute(params, body, output);
-                } else {
-                    task.execute(params, output);
-                }
-            } catch (Exception e) {
-                throw e;
+            if (task instanceof PostBodyTask) {
+                PostBodyTask postBodyTask = (PostBodyTask) task;
+                postBodyTask.execute(params, body, output);
+            } else {
+                task.execute(params, output);
             }
         }
     }

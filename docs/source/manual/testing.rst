@@ -188,7 +188,7 @@ loads a given resource instance in an in-memory Jersey server:
 
         @Test
         public void testGetPerson() {
-            assertThat(resources.client().target("/person/blah").request().get(Person.class))
+            assertThat(resources.target("/person/blah").request().get(Person.class))
                     .isEqualTo(person);
             verify(dao).fetchPerson("blah");
         }
@@ -199,7 +199,7 @@ want to test via ``ResourceTestRule.Builder#addResource(Object)``. Use a ``@Clas
 to have the rule wrap the entire test class or the ``@Rule`` annotation to have the rule wrap
 each test individually (make sure to remove static final modifier from ``resources``).
 
-In your tests, use ``#client()``, which returns a Jersey ``Client`` instance to talk to and test
+In your tests, use ``#target(String path)``, which initializes a request to talk to and test
 your instances.
 
 This doesn't require opening a port, but ``ResourceTestRule`` tests will perform all the serialization,
@@ -227,8 +227,8 @@ all custom exception mappers will need to be registered on the builder, similarl
 Test Containers
 ---------------
 
-Note that the in-memory Jersey test container does not support all features, such as the ``@Context`` injection used by
-``BasicAuthFactory`` and ``OAuthFactory``. A different `test container`__ can be used via
+Note that the in-memory Jersey test container does not support all features, such as the ``@Context`` injection.
+A different `test container`__ can be used via
 ``ResourceTestRule.Builder#setTestContainerFactory(TestContainerFactory)``.
 
 For example, if you want to use the `Grizzly`_ HTTP server (which supports ``@Context`` injections) you need to add the
@@ -266,7 +266,7 @@ dependency for the Jersey Test Framework providers to your Maven POM and set ``G
 
         @Test
         public void testResource() {
-            assertThat(RULE.getJerseyTest().target("/example").request()
+            assertThat(RULE.target("/example").request()
                 .get(String.class))
                 .isEqualTo("example");
         }
@@ -337,6 +337,10 @@ Adding ``DropwizardAppRule`` to your JUnit test class will start the app prior t
 running and stop it again when they've completed (roughly equivalent to having used ``@BeforeClass`` and ``@AfterClass``).
 ``DropwizardAppRule`` also exposes the app's ``Configuration``,
 ``Environment`` and the app object itself so that these can be queried by the tests.
+
+If you don't want to use the ``dropwizard-client`` module or find it excessive for testing, you can get access to
+a Jersey HTTP client by calling the `client` method on the rule. The returned client is managed by the rule
+and can be reused across tests.
 
 .. code-block:: java
 
@@ -508,3 +512,39 @@ The ``DAOTestRule``
 * Creates a simple default Hibernate configuration using an H2 in-memory database
 * Provides a ``SessionFactory`` instance which can be passed to, e.g., a subclass of ``AbstractDAO``
 * Provides a function for executing database operations within a transaction
+
+.. _man-testing-configurations:
+
+Testing Configurations
+======================
+
+Configuration objects can be tested for correct deserialization and validation. Using the classes
+created in :ref:`polymorphic configurations <man-configuration-polymorphic>` as an example, one can
+assert the expected widget is deserialized based on the ``type`` field.
+
+.. code-block:: java
+
+    public class WidgetFactoryTest {
+        private final ObjectMapper objectMapper = Jackson.newObjectMapper();
+        private final Validator validator = Validators.newValidator();
+        private final YamlConfigurationFactory<WidgetFactory> factory =
+                new YamlConfigurationFactory<>(WidgetFactory.class, validator, objectMapper, "dw");
+
+        @Test
+        public void isDiscoverable() throws Exception {
+            // Make sure the types we specified in META-INF gets picked up
+            assertThat(new DiscoverableSubtypeResolver().getDiscoveredSubtypes())
+                    .contains(HammerFactory.class)
+                    .contains(ChiselFactory.class);
+        }
+
+        @Test
+        public void testBuildAHammer() throws Exception {
+            final File yml = new File(Resources.getResource("yaml/hammer.yml").toURI());
+            final WidgetFactory wid = factory.build(yml);
+            assertThat(wid).isInstanceOf(HammerFactory.class);
+            assertThat(((HammerFactory) wid).createWidget().getWeight()).isEqualTo(10);
+        }
+
+        // test for the chisel factory
+    }

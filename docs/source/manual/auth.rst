@@ -183,7 +183,7 @@ There are two ways to protect a resource.  You can mark your resource method wit
 * ``@DenyAll``. No access will be granted to anyone.
 
 .. note::
-    You can use ``@RolesAllowed``,``@PermitAll`` on the class level. Method annotations take precedence over the class ones.
+    You can use ``@RolesAllowed``, ``@PermitAll`` on the class level. Method annotations take precedence over the class ones.
 
 Alternatively, you can annotate the parameter representing your principal with ``@Auth``. Note you must register a
 jersey provider to make this work.
@@ -216,9 +216,36 @@ If there are no provided credentials for the request, or if the credentials are 
 provider will return a scheme-appropriate ``401 Unauthorized`` response without calling your
 resource method.
 
-If you have a resource which is optionally protected (e.g., you want to display a logged-in user's
-name but not require login), you need to implement a custom filter which injects a security context
-containing the principal if it exists, without performing authentication.
+Optional protection
+-------------------
+
+Resource methods can be _optionally_ protected by representing the
+principal as an ``Optional``. In such cases, the ``Optional`` resource
+method argument will be populated with the principal, if
+present. Otherwise, the argument will be ``Optional.empty``.
+
+For instance, say you have an endpoint that should display a logged-in
+user's name, but return an anonymous reply for unauthenticated
+requests. You need to implement a custom filter which injects a
+security context containing the principal if it exists, without
+performing authentication.
+
+.. code-block:: java
+
+    @GET
+    public String getGreeting(@Auth Optional<User> userOpt) {
+        if (userOpt.isPresent()) {
+            return "Hello, " + userOpt.get().getName() + "!";
+        } else {
+            return "Greetings, anonymous visitor!"
+        }
+    }
+
+For optionally-protected resources, requests with invalid auth will be
+treated the same as those with no provided auth credentials. That is
+to say, requests that _fail_ to meet an authenticator or authorizer's
+requirements result in an empty principal being passed to the resource
+method.
 
 Testing Protected Resources
 ===========================
@@ -270,13 +297,13 @@ When you build your ``ResourceTestRule``, add the ``GrizzlyWebTestContainerFacto
             .build();
 
 
-In this example, we are testing the oauth authentication, so we need to set the header manually. Note the use of ``resources.getJerseyTest()`` to make the test work
+In this example, we are testing the oauth authentication, so we need to set the header manually.
 
 .. code-block:: java
 
     @Test
     public void testProtected() throws Exception {
-        final Response response = rule.getJerseyTest().target("/protected")
+        final Response response = rule.target("/protected")
                 .request(MediaType.APPLICATION_JSON_TYPE)
                 .header("Authorization", "Bearer TOKEN")
                 .get();
@@ -292,7 +319,7 @@ resources. For example you may want Basic authentication for one resource and OA
 for another resource, at the same time using a different `Principal` for each
 authentication scheme.
 
-For this use case, there is the ``PolymorphicAuthDynamicFeature`` and the 
+For this use case, there is the ``PolymorphicAuthDynamicFeature`` and the
 ``PolymorphicAuthValueFactoryProvider``. With these two components, we can use different
 combinations of authentication schemes/authenticators/authorizers/principals. To use this
 feature, we need to do a few things:
@@ -310,7 +337,7 @@ a different principal for each.
 
 .. code-block:: java
 
-    final AuthFilter<BasicCredentials, BasicPrincipal> basicFilter 
+    final AuthFilter<BasicCredentials, BasicPrincipal> basicFilter
             = new BasicCredentialAuthFilter.Builder<BasicPrincipal>()
                     .setAuthenticator(new ExampleAuthenticator())
                     .setRealm("SUPER SECRET STUFF")
@@ -323,7 +350,7 @@ a different principal for each.
 
     final PolymorphicAuthDynamicFeature feature = new PolymorphicAuthDynamicFeature<>(
         ImmutableMap.of(
-            BasicPrincipal.class, basicFilter, 
+            BasicPrincipal.class, basicFilter,
             OAuthPrincipal.class, oauthFilter));
     final AbstractBinder binder = new PolymorphicAuthValueFactoryProvider.Binder<>(
         ImmutableSet.of(BasicPrincipal.class, OAuthPrincipal.class));
@@ -363,7 +390,7 @@ So continuing with the previous example you should add the following configurati
 
     ... = new OAuthCredentialAuthFilter.Builder<OAuthPrincipal>()
             .setAuthorizer(new ExampleAuthorizer())..  // set authorizer
-    
+
     environment.jersey().register(RolesAllowedDynamicFeature.class);
 
 Now we can do
@@ -380,6 +407,3 @@ Now we can do
 
 .. note::
     The polymorphic auth feature *SHOULD NOT* be used with any other ``AuthDynamicFeature``. Doing so may have undesired effects.
-
-
-

@@ -49,7 +49,7 @@ and how to get a ``DataSourceFactory`` from your configuration subclass:
 
     @Override
     public void run(ExampleConfiguration config, Environment environment) {
-        final UserDAO dao = new UserDAO(hibernate.getSessionFactory());
+        final PersonDAO dao = new PersonDAO(hibernate.getSessionFactory());
         environment.jersey().register(new UserResource(dao));
     }
 
@@ -150,7 +150,7 @@ back.
                ``null`` values produced by Jackson).
 
 Transactional Resource Methods Outside Jersey Resources
-----------------------------------------------------
+-------------------------------------------------------
 
 Currently creating transactions with the `@UnitOfWork` annotation works out-of-box only for resources
 managed by Jersey. If you want to use it outside Jersey resources, e.g. in authenticators, you should

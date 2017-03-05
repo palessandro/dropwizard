@@ -2,8 +2,10 @@ package io.dropwizard.views.mustache;
 
 import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.dropwizard.logging.BootstrapLogging;
 import io.dropwizard.views.ViewMessageBodyWriter;
+import io.dropwizard.views.ViewRenderExceptionMapper;
 import io.dropwizard.views.ViewRenderer;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.test.JerseyTest;
@@ -59,6 +61,7 @@ public class MustacheViewRendererTest extends JerseyTest {
         ResourceConfig config = new ResourceConfig();
         final ViewRenderer renderer = new MustacheViewRenderer();
         config.register(new ViewMessageBodyWriter(new MetricRegistry(), ImmutableList.of(renderer)));
+        config.register(new ViewRenderExceptionMapper());
         config.register(new ExampleResource());
         return config;
     }
@@ -85,7 +88,7 @@ public class MustacheViewRendererTest extends JerseyTest {
                     .isEqualTo(500);
 
             assertThat(e.getResponse().readEntity(String.class))
-                    .isEqualTo(ViewMessageBodyWriter.TEMPLATE_ERROR_MSG);
+                    .isEqualTo(ViewRenderExceptionMapper.TEMPLATE_ERROR_MSG);
         }
     }
 
@@ -99,7 +102,21 @@ public class MustacheViewRendererTest extends JerseyTest {
                     .isEqualTo(500);
 
             assertThat(e.getResponse().readEntity(String.class))
-                .isEqualTo(ViewMessageBodyWriter.TEMPLATE_ERROR_MSG);
+                .isEqualTo(ViewRenderExceptionMapper.TEMPLATE_ERROR_MSG);
         }
+    }
+
+    @Test
+    public void cacheByDefault() {
+        MustacheViewRenderer mustacheViewRenderer = new MustacheViewRenderer();
+        mustacheViewRenderer.configure(ImmutableMap.of());
+        assertThat(mustacheViewRenderer.isUseCache()).isTrue();
+    }
+
+    @Test
+    public void canDisableCache() {
+        MustacheViewRenderer mustacheViewRenderer = new MustacheViewRenderer();
+        mustacheViewRenderer.configure(ImmutableMap.of("cache", "false"));
+        assertThat(mustacheViewRenderer.isUseCache()).isFalse();
     }
 }

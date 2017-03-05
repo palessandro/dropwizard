@@ -11,12 +11,13 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.deser.Deserializers;
-import com.fasterxml.jackson.databind.deser.std.EnumDeserializer;
 import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.databind.introspect.AnnotatedMethod;
-import com.google.common.base.CharMatcher;
+import io.dropwizard.util.Enums;
 
 import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -50,26 +51,11 @@ public class FuzzyEnumModule extends Module {
 
         @Override
         public Enum<?> deserialize(JsonParser jp, DeserializationContext ctxt) throws IOException {
-            final String text = CharMatcher.WHITESPACE
-                    .removeFrom(jp.getText())
-                    .replace('-', '_')
-                    .replace('.', '_');
-            for (Enum<?> constant : constants) {
-                if (constant.name().equalsIgnoreCase(text)) {
-                    return constant;
-                }
+            Enum<?> constant = Enums.fromStringFuzzy(jp.getText(), constants);
+            if (constant != null) {
+                return constant;
             }
-
-            //In some cases there are certain enums that don't follow the same patter across an enterprise.  So this
-            //means that you have a mix of enums that use toString(), some use @JsonCreator, and some just use the
-            //standard constant name().  This block handles finding the proper enum by toString()
-            for (Enum<?> constant : constants) {
-                if (constant.toString().equalsIgnoreCase(jp.getText())) {
-                    return constant;
-                }
-            }
-
-            throw ctxt.mappingException(text + " was not one of " + acceptedValues);
+            throw ctxt.mappingException(jp.getText() + " was not one of " + acceptedValues);
         }
     }
 
@@ -89,9 +75,19 @@ public class FuzzyEnumModule extends Module {
             final Collection<AnnotatedMethod> factoryMethods = desc.getFactoryMethods();
             if (factoryMethods != null) {
                 for (AnnotatedMethod am : factoryMethods) {
-                    final JsonCreator creator = am.getAnnotation(JsonCreator.class);
-                    if (creator != null) {
-                        return EnumDeserializer.deserializerForCreator(config, type, am);
+                    if (am.hasAnnotation(JsonCreator.class)) {
+                        return null;
+                    }
+                }
+            }
+
+            // If any enum choice is annotated with an annotation from jackson, defer to
+            // Jackson to do the deserialization
+            for (Field field : type.getFields()) {
+                for (Annotation annotation : field.getAnnotations()) {
+                    final String packageName = annotation.annotationType().getPackage().getName();
+                    if (packageName.equals("com.fasterxml.jackson.annotation")) {
+                        return null;
                     }
                 }
             }

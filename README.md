@@ -1,7 +1,7 @@
 Dropwizard
 ==========
 [![Build Status](https://travis-ci.org/dropwizard/dropwizard.svg?branch=master)](https://travis-ci.org/dropwizard/dropwizard)
-[![Coverage Status](https://img.shields.io/coveralls/dropwizard/dropwizard.svg)](https://coveralls.io/r/dropwizard/dropwizard)
+[![Coverage Status](https://coveralls.io/repos/github/dropwizard/dropwizard/badge.svg?branch=master)](https://coveralls.io/github/dropwizard/dropwizard?branch=master)
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/io.dropwizard/dropwizard-core/badge.svg)](https://maven-badges.herokuapp.com/maven-central/io.dropwizard/dropwizard-core/)
 [![Javadoc](https://javadoc-emblem.rhcloud.com/doc/io.dropwizard/dropwizard-core/badge.svg)](http://www.javadoc.io/doc/io.dropwizard/dropwizard-core)
 [![Code Climate](https://codeclimate.com/github/dropwizard/dropwizard/badges/gpa.svg)](https://codeclimate.com/github/dropwizard/dropwizard)
@@ -40,3 +40,14 @@ mailing list, please use the following guidelines:
 * Paste error output or logs in your issue or in a Gist. If pasting them in the GitHub
 issue, wrap it in three backticks: ```  so that it renders nicely
 * Write a unit test to show the issue!
+
+Sponsors
+--------
+
+Dropwizard is generously supported by some companies with licenses and free accounts for their products.
+
+### JetBrains
+
+![JetBrains](docs/source/about/jetbrains.png)
+
+[JetBrains](https://www.jetbrains.com/) supports our open source project by sponsoring some [All Products Packs](https://www.jetbrains.com/products.html) within their [Free Open Source License](https://www.jetbrains.com/buy/opensource/) program.

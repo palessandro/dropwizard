@@ -280,9 +280,14 @@ test keystore you can use in the `Dropwizard example project`__.
 
 By default, only secure TLSv1.2 cipher suites are allowed. Older versions of cURL, Java 6 and 7, and
 other clients may be unable to communicate with the allowed cipher suites, but this was a conscious
-decision that sacrifices interoperability for security. Dropwizard allows a workaround by specifying
-a customized list of cipher suites. The following list of excluded cipher suites will allow for
-TLSv1 and TLSv1.1 clients to negotiate a connection similar to pre-Dropwizard 1.0.
+decision that sacrifices interoperability for security.
+
+Dropwizard allows a workaround by specifying a customized list of cipher suites. If no lists of
+supported protocols or cipher suites are specified, then the JVM defaults are used. If no lists of
+excluded protocols or cipher suites are specified, then the defaults are inherited from Jetty.
+
+The following list of excluded cipher suites will allow for TLSv1 and TLSv1.1 clients to negotiate a
+connection similar to pre-Dropwizard 1.0.
 
 .. code-block:: yaml
 
@@ -524,6 +529,40 @@ instances, the extended constructor should be used to specify a unique name for 
         bootstrap.addBundle(new AssetsBundle("/assets/js", "/js", null, "js"));
         bootstrap.addBundle(new AssetsBundle("/assets/fonts", "/fonts", null, "fonts"));
     }
+
+.. _man-core-bundles-ssl-reload:
+
+SSL Reload
+----------
+
+By registering the ``SslReloadBundle`` your application can have new certificate information
+reloaded at runtime, so a restart is not necessary.
+
+.. code-block:: java
+
+    @Override
+    public void initialize(Bootstrap<HelloWorldConfiguration> bootstrap) {
+        bootstrap.addBundle(new SslReloadBundle());
+    }
+
+To trigger a reload send a ``POST`` request to ``ssl-reload``
+
+.. code-block:: shell
+
+    curl -k -X POST 'https://localhost:<admin-port>/tasks/ssl-reload'
+
+Dropwizard will use the same exact https configuration (keystore location, password, etc) when
+performing the reload.
+
+.. note::
+
+    If anything is wrong with the new certificate (eg. wrong password in keystore), no new
+    certificates are loaded. So if the application and admin ports use different certificates and
+    one of them is invalid, then none of them are reloaded.
+
+    A http 500 error is returned on reload failure, so make sure to trap for this error with
+    whatever tool is used to trigger a certificate reload, and alert the appropriate admin. If the
+    situation is not remedied, next time the app is stopped, it will be unable to start!
 
 .. _man-core-commands:
 
@@ -1219,14 +1258,23 @@ and then registering the exception mapper:
 Overriding Default Exception Mappers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you want more control, you can disable the exception mappers Dropwizard provides by default. This is done
-by setting ``server.registerDefaultExceptionMappers`` to ``false``. Since this disables all default exception
-mappers make sure to re-enable exception mappers that are wanted. The default exception mappers are:
+To override a specific exception mapper, register your own class that implements the same
+``ExceptionMapper<T>`` as one of the default. For instance, we can customize responses caused by
+Jackson exceptions:
 
-- ``LoggingExceptionMapper<Throwable>``
-- ``JerseyViolationExceptionMapper``
-- ``JsonProcessingExceptionMapper``
-- ``EarlyEofExceptionMapper``
+.. code-block:: java
+
+    public class JsonProcessingExceptionMapper implements ExceptionMapper<JsonProcessingException> {
+        @Override
+        public Response toResponse(JsonProcessingException exception) {
+            // create the response
+        }
+    }
+
+With this method, one doesn't need to know what the default exception mappers are, as they are
+overridden if the user supplies a conflicting mapper. While not preferential, one can also disable
+all default exception mappers, by setting ``server.registerDefaultExceptionMappers`` to ``false``.
+See the class ``ExceptionMapperBinder`` for a list of the default exception mappers.
 
 .. _man-core-resources-uris:
 
@@ -1377,8 +1425,8 @@ Then make a ``FunkySerializer`` class which implements ``JsonSerializer<Funky>``
 
 .. _man-core-representations-advanced-snake-case:
 
-``snake_case``
-**************
+Snake Case
+~~~~~~~~~~
 
 A common issue with JSON is the disagreement between ``camelCase`` and ``snake_case`` field names.
 Java and Javascript folks tend to like ``camelCase``; Ruby, Python, and Perl folks insist on

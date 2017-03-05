@@ -4,11 +4,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
+import io.dropwizard.jersey.AbstractJerseyTest;
 import io.dropwizard.jersey.DropwizardResourceConfig;
-import io.dropwizard.logging.BootstrapLogging;
 import org.glassfish.jersey.client.ClientConfig;
-import org.glassfish.jersey.test.JerseyTest;
-import org.glassfish.jersey.test.TestProperties;
 import org.junit.Test;
 
 import javax.ws.rs.client.Entity;
@@ -18,14 +16,10 @@ import javax.ws.rs.core.Response;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-public class JsonProcessingExceptionMapperTest extends JerseyTest {
-    static {
-        BootstrapLogging.bootstrap();
-    }
+public class JsonProcessingExceptionMapperTest extends AbstractJerseyTest {
 
     @Override
     protected Application configure() {
-        forceSet(TestProperties.CONTAINER_PORT, "0");
         return DropwizardResourceConfig.forTesting(new MetricRegistry())
                 .packages("io.dropwizard.jersey.jackson");
     }
@@ -42,6 +36,7 @@ public class JsonProcessingExceptionMapperTest extends JerseyTest {
         Response response = target("/json/broken").request(MediaType.APPLICATION_JSON)
                 .post(Entity.entity(new BrokenRepresentation(ImmutableList.of("whee")), MediaType.APPLICATION_JSON));
         assertThat(response.getStatus()).isEqualTo(500);
+        assertThat(response.getMediaType()).isEqualTo(MediaType.APPLICATION_JSON_TYPE);
     }
 
     @Test
@@ -53,12 +48,14 @@ public class JsonProcessingExceptionMapperTest extends JerseyTest {
         Response response = target("/json/brokenList").request(MediaType.APPLICATION_JSON)
             .post(Entity.entity(ent, MediaType.APPLICATION_JSON));
         assertThat(response.getStatus()).isEqualTo(500);
+        assertThat(response.getMediaType()).isEqualTo(MediaType.APPLICATION_JSON_TYPE);
     }
 
     @Test
     public void returnsA500ForNonSerializableRepresentationClassesOutbound() throws Exception {
         Response response = target("/json/brokenOutbound").request(MediaType.APPLICATION_JSON).get();
         assertThat(response.getStatus()).isEqualTo(500);
+        assertThat(response.getMediaType()).isEqualTo(MediaType.APPLICATION_JSON_TYPE);
     }
 
     @Test
@@ -66,6 +63,7 @@ public class JsonProcessingExceptionMapperTest extends JerseyTest {
         Response response = target("/json/interface").request(MediaType.APPLICATION_JSON)
             .post(Entity.entity("\"hello\"", MediaType.APPLICATION_JSON));
         assertThat(response.getStatus()).isEqualTo(500);
+        assertThat(response.getMediaType()).isEqualTo(MediaType.APPLICATION_JSON_TYPE);
     }
 
     @Test
@@ -73,6 +71,15 @@ public class JsonProcessingExceptionMapperTest extends JerseyTest {
         Response response = target("/json/interfaceList").request(MediaType.APPLICATION_JSON)
             .post(Entity.entity("[\"hello\"]", MediaType.APPLICATION_JSON));
         assertThat(response.getStatus()).isEqualTo(500);
+        assertThat(response.getMediaType()).isEqualTo(MediaType.APPLICATION_JSON_TYPE);
+    }
+
+    @Test
+    public void returnsA500ForBadDeserializers() throws Exception {
+        Response response = target("/json/custom").request(MediaType.APPLICATION_JSON)
+            .post(Entity.entity("{}", MediaType.APPLICATION_JSON));
+        assertThat(response.getStatus()).isEqualTo(500);
+        assertThat(response.getMediaType()).isEqualTo(MediaType.APPLICATION_JSON_TYPE);
     }
 
     @Test
